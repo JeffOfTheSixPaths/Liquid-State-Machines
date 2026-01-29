@@ -17,7 +17,7 @@ np.random.seed(0)
 
 TIME_STEPS = 25
 N_INPUT = 28 * 28
-N_RES = 500
+N_RES = 1000
 BATCH_SIZE = 1
 
 #######################################
@@ -33,79 +33,76 @@ test_data = datasets.MNIST(root=".", train=False, download=True, transform=trans
 train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
 test_loader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False)
 
-'''
-class LSM(nn.Module):
-    def __init__(self, res_sparsity=0.1, in_sparsity=0.2):
-        super().__init__()
 
-        self.fc_in = nn.Linear(N_INPUT, N_RES, bias=False)
-        self.fc_rec = nn.Linear(N_RES, N_RES, bias=False)
+# class LSM(nn.Module):
+#     def __init__(self, res_sparsity=0.1, in_sparsity=0.2):
+#         super().__init__()
 
-        self.lif = snn.Leaky(
-            beta=0.95,
-            spike_grad=surrogate.fast_sigmoid()
-        )
+#         self.fc_in = nn.Linear(N_INPUT, N_RES, bias=False)
+#         self.fc_rec = nn.Linear(N_RES, N_RES, bias=False)
 
-        # Initialize weights
-        nn.init.normal_(self.fc_in.weight, mean=0.0, std=0.3)
-        nn.init.normal_(self.fc_rec.weight, mean=0.0, std=0.1)
+#         self.lif = snn.Leaky(
+#             beta=0.95,
+#             spike_grad=surrogate.fast_sigmoid()
+#         )
 
-        ################################
-        # Create sparse masks
-        ################################
+#         # Initialize weights
+#         nn.init.normal_(self.fc_in.weight, mean=0.0, std=0.3)
+#         nn.init.normal_(self.fc_rec.weight, mean=0.0, std=0.1)
 
-        # Reservoir mask
-        rec_mask = (torch.rand(N_RES, N_RES) < res_sparsity).float()
+#         ################################
+#         # Create sparse masks
+#         ################################
 
-        # Remove self-connections (optional but typical)
-        rec_mask.fill_diagonal_(0)
+#         # Reservoir mask
+#         rec_mask = (torch.rand(N_RES, N_RES) < res_sparsity).float()
 
-        # Input mask (optional)
-        in_mask = (torch.rand(N_RES, N_INPUT) < in_sparsity).float()
+#         # Remove self-connections (optional but typical)
+#         rec_mask.fill_diagonal_(0)
 
-        ################################
-        # Apply masks
-        ################################
+#         # Input mask (optional)
+#         in_mask = (torch.rand(N_RES, N_INPUT) < in_sparsity).float()
 
-        with torch.no_grad():
-            self.fc_rec.weight *= rec_mask
-            self.fc_in.weight *= in_mask
+#         ################################
+#         # Apply masks
+#         ################################
 
-            # Scale recurrent weights for stability
-            spectral_radius = torch.max(
-                torch.abs(torch.linalg.eigvals(self.fc_rec.weight))
-            ).real
+#         with torch.no_grad():
+#             self.fc_rec.weight *= rec_mask
+#             self.fc_in.weight *= in_mask
 
-            self.fc_rec.weight *= 0.9 / spectral_radius
+#             # Scale recurrent weights for stability
+#             spectral_radius = torch.max(
+#                 torch.abs(torch.linalg.eigvals(self.fc_rec.weight))
+#             ).real
 
-        ################################
-        # Freeze reservoir
-        ################################
+#             self.fc_rec.weight *= 0.9 / spectral_radius
 
-        for p in self.parameters():
-            p.requires_grad = False
+#         ################################
+#         # Freeze reservoir
+#         ################################
 
-        # Store masks (not strictly needed, but useful)
-        self.register_buffer("rec_mask", rec_mask)
-        self.register_buffer("in_mask", in_mask)
+#         for p in self.parameters():
+#             p.requires_grad = False
 
-    def forward(self, x):
-        mem = torch.zeros((x.size(0), N_RES), device=x.device)
-        spk = torch.zeros((x.size(0), N_RES), device=x.device)
+#         # Store masks (not strictly needed, but useful)
+#         self.register_buffer("rec_mask", rec_mask)
+#         self.register_buffer("in_mask", in_mask)
 
-        spike_sum = torch.zeros((x.size(0), N_RES), device=x.device)
+#     def forward(self, x):
+#         mem = torch.zeros((x.size(0), N_RES), device=x.device)
+#         spk = torch.zeros((x.size(0), N_RES), device=x.device)
 
-        for _ in range(TIME_STEPS):
-            cur = self.fc_in(x) + self.fc_rec(spk)
-            spk, mem = self.lif(cur, mem)
-            spike_sum += spk
+#         spike_sum = torch.zeros((x.size(0), N_RES), device=x.device)
 
-        return spike_sum / TIME_STEPS
+#         for _ in range(TIME_STEPS):
+#             cur = self.fc_in(x) + self.fc_rec(spk)
+#             spk, mem = self.lif(cur, mem)
+#             spike_sum += spk
 
-'''
-#######################################
-# Liquid State Machine
-#######################################
+#         return spike_sum / TIME_STEPS
+
+
 class LSM(nn.Module):
     def __init__(self):
         super().__init__()
@@ -175,9 +172,7 @@ X_train = scaler.fit_transform(X_train)
 X_test = scaler.transform(X_test)
 
 clf = LogisticRegression(
-    max_iter=2000,
-    n_jobs=-1,
-    multi_class="auto"
+    max_iter=2000
 )
 
 clf.fit(X_train, y_train)
