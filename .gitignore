@@ -7,3 +7,4 @@ MNIST/raw/train-images-idx3-ubyte.gz
 MNIST/raw/train-labels-idx1-ubyte.gz
 MNIST/raw/train-labels-idx1-ubyte
 .vscode/settings.json
+data/*

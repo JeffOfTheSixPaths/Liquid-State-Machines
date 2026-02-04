@@ -7,22 +7,21 @@ from torch.utils.data import DataLoader
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 import numpy as np
+import time
 
-#######################################
-# Configuration
-#######################################
-device = "cpu"
+import torch
+
+torch.set_printoptions(threshold=torch.inf)
+
+device = "cuda"
 torch.manual_seed(0)
-np.random.seed(0)
+np.random.seed()
 
 TIME_STEPS = 25
 N_INPUT = 28 * 28
-N_RES = 1000
+N_RES = 4000
 BATCH_SIZE = 1
 
-#######################################
-# Dataset (MNIST)
-#######################################
 transform = transforms.Compose([
     transforms.ToTensor()
 ])
@@ -34,95 +33,66 @@ train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
 test_loader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False)
 
 
-# class LSM(nn.Module):
-#     def __init__(self, res_sparsity=0.1, in_sparsity=0.2):
-#         super().__init__()
-
-#         self.fc_in = nn.Linear(N_INPUT, N_RES, bias=False)
-#         self.fc_rec = nn.Linear(N_RES, N_RES, bias=False)
-
-#         self.lif = snn.Leaky(
-#             beta=0.95,
-#             spike_grad=surrogate.fast_sigmoid()
-#         )
-
-#         # Initialize weights
-#         nn.init.normal_(self.fc_in.weight, mean=0.0, std=0.3)
-#         nn.init.normal_(self.fc_rec.weight, mean=0.0, std=0.1)
-
-#         ################################
-#         # Create sparse masks
-#         ################################
-
-#         # Reservoir mask
-#         rec_mask = (torch.rand(N_RES, N_RES) < res_sparsity).float()
-
-#         # Remove self-connections (optional but typical)
-#         rec_mask.fill_diagonal_(0)
-
-#         # Input mask (optional)
-#         in_mask = (torch.rand(N_RES, N_INPUT) < in_sparsity).float()
-
-#         ################################
-#         # Apply masks
-#         ################################
-
-#         with torch.no_grad():
-#             self.fc_rec.weight *= rec_mask
-#             self.fc_in.weight *= in_mask
-
-#             # Scale recurrent weights for stability
-#             spectral_radius = torch.max(
-#                 torch.abs(torch.linalg.eigvals(self.fc_rec.weight))
-#             ).real
-
-#             self.fc_rec.weight *= 0.9 / spectral_radius
-
-#         ################################
-#         # Freeze reservoir
-#         ################################
-
-#         for p in self.parameters():
-#             p.requires_grad = False
-
-#         # Store masks (not strictly needed, but useful)
-#         self.register_buffer("rec_mask", rec_mask)
-#         self.register_buffer("in_mask", in_mask)
-
-#     def forward(self, x):
-#         mem = torch.zeros((x.size(0), N_RES), device=x.device)
-#         spk = torch.zeros((x.size(0), N_RES), device=x.device)
-
-#         spike_sum = torch.zeros((x.size(0), N_RES), device=x.device)
-
-#         for _ in range(TIME_STEPS):
-#             cur = self.fc_in(x) + self.fc_rec(spk)
-#             spk, mem = self.lif(cur, mem)
-#             spike_sum += spk
-
-#         return spike_sum / TIME_STEPS
-
-
 class LSM(nn.Module):
-    def __init__(self):
+    def __init__(self, res_sparsity=0.8, in_sparsity=0.2):
         super().__init__()
 
         self.fc_in = nn.Linear(N_INPUT, N_RES, bias=False)
         self.fc_rec = nn.Linear(N_RES, N_RES, bias=False)
-
-        # Freeze reservoir weights
-        for p in self.parameters():
-            p.requires_grad = False
 
         self.lif = snn.Leaky(
             beta=0.95,
             spike_grad=surrogate.fast_sigmoid()
         )
 
+        # Initialize weights
         nn.init.normal_(self.fc_in.weight, mean=0.0, std=0.3)
         nn.init.normal_(self.fc_rec.weight, mean=0.0, std=0.1)
 
-    def forward(self, x): 
+        ################################
+        # Create sparse masks
+        ################################
+
+        # Reservoir mask
+        rec_mask = (torch.rand(N_RES, N_RES) < res_sparsity).float()
+
+        # Remove self-connections (optional but typical)
+        rec_mask.fill_diagonal_(0)
+
+        # Input mask (optional)
+        in_mask = (torch.rand(N_RES, N_INPUT) < in_sparsity).float()
+        
+        print("rec_mask")
+        #print(rec_mask)
+
+
+        ################################
+        # Apply masks
+        ################################
+
+        with torch.no_grad():
+            self.fc_rec.weight *= rec_mask
+            self.fc_in.weight *= in_mask
+
+            # Scale recurrent weights for stability
+            spectral_radius = torch.max(
+                torch.abs(torch.linalg.eigvals(self.fc_rec.weight))
+            ).real
+
+            self.fc_rec.weight *= 0.9 / spectral_radius
+
+        ################################
+        # Freeze reservoir
+        ################################
+
+        for p in self.parameters():
+            p.requires_grad = False
+
+        # Store masks (not strictly needed, but useful)
+        self.register_buffer("rec_mask", rec_mask)
+        self.register_buffer("in_mask", in_mask)
+
+    def forward(self, x):
         mem = torch.zeros((x.size(0), N_RES), device=x.device)
         spk = torch.zeros((x.size(0), N_RES), device=x.device)
 
@@ -134,6 +104,39 @@ class LSM(nn.Module):
             spike_sum += spk
 
         return spike_sum / TIME_STEPS
+
+
+# class LSM(nn.Module):
+#     def __init__(self):
+#         super().__init__()
+
+#         self.fc_in = nn.Linear(N_INPUT, N_RES, bias=False)
+#         self.fc_rec = nn.Linear(N_RES, N_RES, bias=False)
+
+#         # Freeze reservoir weights
+#         for p in self.parameters():
+#             p.requires_grad = False
+
+#         self.lif = snn.Leaky(
+#             beta=0.95,
+#             spike_grad=surrogate.fast_sigmoid()
+#         )
+
+#         nn.init.normal_(self.fc_in.weight, mean=0.0, std=0.3)
+#         nn.init.normal_(self.fc_rec.weight, mean=0.0, std=0.1)
+
+#     def forward(self, x): 
+#         mem = torch.zeros((x.size(0), N_RES), device=x.device)
+#         spk = torch.zeros((x.size(0), N_RES), device=x.device)
+
+#         spike_sum = torch.zeros((x.size(0), N_RES), device=x.device)
+
+#         for _ in range(TIME_STEPS):
+#             cur = self.fc_in(x) + self.fc_rec(spk)
+#             spk, mem = self.lif(cur, mem)
+#             spike_sum += spk
+
+#         return spike_sum / TIME_STEPS
 
 
 lsm = LSM().to(device)
@@ -157,12 +160,15 @@ def collect_states(loader, max_samples):
 
     return np.array(states), np.array(labels)
 
-
+start = time.time()
 print("Extracting training states...")
 X_train, y_train = collect_states(train_loader, max_samples=6000)
+print(time.time() - start)
 
 print("Extracting test states...")
 X_test, y_test = collect_states(test_loader, max_samples=1000)
+print(time.time() - start)
+
 
 #######################################
 # Train linear readout
