@@ -14,7 +14,7 @@ import torch
 torch.set_printoptions(threshold=torch.inf)
 
 device = "cuda"
-torch.manual_seed(0)
+torch.manual_seed(42)
 np.random.seed()
 
 TIME_STEPS = 25
@@ -34,7 +34,7 @@ test_loader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False)
 
 
 class LSM(nn.Module):
-    def __init__(self, res_sparsity=0.8, in_sparsity=0.2):
+    def __init__(self, res_sparsity=1, in_sparsity=0.2):
         super().__init__()
 
         self.fc_in = nn.Linear(N_INPUT, N_RES, bias=False)
@@ -106,37 +106,6 @@ class LSM(nn.Module):
         return spike_sum / TIME_STEPS
 
 
-# class LSM(nn.Module):
-#     def __init__(self):
-#         super().__init__()
-
-#         self.fc_in = nn.Linear(N_INPUT, N_RES, bias=False)
-#         self.fc_rec = nn.Linear(N_RES, N_RES, bias=False)
-
-#         # Freeze reservoir weights
-#         for p in self.parameters():
-#             p.requires_grad = False
-
-#         self.lif = snn.Leaky(
-#             beta=0.95,
-#             spike_grad=surrogate.fast_sigmoid()
-#         )
-
-#         nn.init.normal_(self.fc_in.weight, mean=0.0, std=0.3)
-#         nn.init.normal_(self.fc_rec.weight, mean=0.0, std=0.1)
-
-#     def forward(self, x): 
-#         mem = torch.zeros((x.size(0), N_RES), device=x.device)
-#         spk = torch.zeros((x.size(0), N_RES), device=x.device)
-
-#         spike_sum = torch.zeros((x.size(0), N_RES), device=x.device)
-
-#         for _ in range(TIME_STEPS):
-#             cur = self.fc_in(x) + self.fc_rec(spk)
-#             spk, mem = self.lif(cur, mem)
-#             spike_sum += spk
-
-#         return spike_sum / TIME_STEPS
 
 
 lsm = LSM().to(device)
@@ -144,6 +113,11 @@ lsm = LSM().to(device)
 #######################################
 # Collect reservoir states
 #######################################
+for data, target in train_loader:   
+    print(data.shape)
+    break
+
+exit()
 def collect_states(loader, max_samples):
     states = []
     labels = []
