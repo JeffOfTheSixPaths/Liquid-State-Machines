@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import torch 
 import snntorch as snn
+
 class Neuron(): # need to add __str__ 
     def __init__(self, beta = 0.9):
         self.neuron = snn.Leaky(beta = 0.9)
@@ -43,13 +44,14 @@ class LSM():
 
 
     def __init__(self, size):
-        neurons = self.init_neurons(self.size)
-        self.make_connections(neurons, num_connections = 2)
+        self.neurons = self.init_neurons(self.size)
+        self.make_connections(self.neurons, num_connections = 2)
+        self.connected_layers = []
 
     def init_neurons(self, num:int) -> list:
-        neurons = []
+        self.neurons = []
         for i in range(num):
-            neurons.append(Class_Neuron())
+            self.neurons.append(Class_Neuron())
         
         return neurons
     
@@ -57,15 +59,18 @@ class LSM():
         for neuron in neurons:
             neuron.add_connections(random.sample(neurons, num_connections))
 
-    def time_step(time_steps = 1):
+    def time_step(input, time_steps = 1):
         for _ in range(time_steps):
-            for i, n in enumerate(neurons):
-                n.receive_spike(min(np.random.random(), 0.4))
+            for i, n in enumerate(self.neurons):
+                n.receive_spike(input)
                 n.time_step()
                 n.send_spike()
 
     def readout() -> list:
         return [ n.mem for n in self.neurons ]
+
+    def add_layer(l, weight):
+        self.connected_layers.append( (l, weight) )
 
 class Layer(nn.Module): # just an SNN
     def __init__(self, input_size, output_size):
@@ -76,6 +81,7 @@ class Layer(nn.Module): # just an SNN
 
         self.fc2 = nn.Linear(self.output_size, 10)
         self.lif2 = snn.Leaky(beta=beta, spike_grad=spike_grad)
+        self.connected_layers = []
 
     def forward(self, x):
         mem1 = self.lif1.init_leaky()
@@ -93,3 +99,18 @@ class Layer(nn.Module): # just an SNN
             spk2_rec.append(spk2)
 
         return torch.stack(spk2_rec)
+    
+    def add_layer(l, weight):
+        self.connected_layers.append( (l, weight) )
+
+class Answer():
+    pass # this should be either a feedforward network or a regression layer
+
+#simulation
+df = 0 # "dataframe"
+time_steps = 100 # this is defined from the previous language
+for _ in time_steps:
+    sample = 1 # sample from df
+
+
+    pass
