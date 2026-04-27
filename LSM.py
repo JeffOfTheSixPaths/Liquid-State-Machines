@@ -111,6 +111,6 @@ df = 0 # "dataframe"
 time_steps = 100 # this is defined from the previous language
 for _ in time_steps:
     sample = 1 # sample from df
-
+    # simulate everything here and print results
 
     pass

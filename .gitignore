@@ -8,3 +8,4 @@ MNIST/raw/train-labels-idx1-ubyte.gz
 MNIST/raw/train-labels-idx1-ubyte
 .vscode/settings.json
 data/*
+LSM.py
