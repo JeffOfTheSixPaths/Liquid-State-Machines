@@ -5,7 +5,7 @@ import tonic
 SEED = 42
 np.random.seed(SEED)
 
-N_RESERVOIR = 500
+N_RESERVOIR = 100
 TIMESTEPS = 100
 
 N_TRAIN = 5000
@@ -17,6 +17,8 @@ SPARSITY = 0.1
 SPECTRAL_RADIUS = 0.9
 
 RIDGE = 1.0  
+
+FPTYPE = np.float16
 
 INPUT_SIZE = 34 * 34 * 2
 
@@ -43,7 +45,7 @@ test_idx = np.random.permutation(len(test_ds))[:N_TEST]
 
 
 def events_to_spikes(events):
-    spikes = np.zeros((TIMESTEPS, INPUT_SIZE), dtype=np.float32)
+    spikes = np.zeros((TIMESTEPS, INPUT_SIZE), dtype=FPTYPE)
 
     if len(events) == 0:
         return spikes
@@ -66,23 +68,23 @@ def events_to_spikes(events):
 
 class LSM:
     def __init__(self):
-        self.Win = np.random.randn(N_RESERVOIR, INPUT_SIZE).astype(np.float32) * 0.1
+        self.Win = np.random.randn(N_RESERVOIR, INPUT_SIZE).astype(FPTYPE) * 0.1
 
-        W = np.random.randn(N_RESERVOIR, N_RESERVOIR).astype(np.float32)
+        W = np.random.randn(N_RESERVOIR, N_RESERVOIR).astype(FPTYPE)
 
         mask = np.random.rand(N_RESERVOIR, N_RESERVOIR) < SPARSITY
         W *= mask
 
         self.Wmask = W.copy()
 
-        eig = np.max(np.abs(np.linalg.eigvals(W)))
+        eig = np.max(np.abs(np.linalg.eigvals(W.astype(np.float64))))
         W *= SPECTRAL_RADIUS / (eig + 1e-8)
 
-        self.W = W.astype(np.float32)
+        self.W = W.astype(FPTYPE)
 
     def run(self, spike_train):
-        v = np.zeros(N_RESERVOIR, dtype=np.float32)
-        spikes = np.zeros(N_RESERVOIR, dtype=np.float32)
+        v = np.zeros(N_RESERVOIR, dtype=FPTYPE)
+        spikes = np.zeros(N_RESERVOIR, dtype=FPTYPE)
 
         states = []
 
@@ -91,17 +93,17 @@ class LSM:
             winput = self.Win @ inp
             wspikes = self.W @ spikes
             v =  l + winput + wspikes
-            spikes = (v > THRESHOLD).astype(np.float32)
+            spikes = (v > THRESHOLD).astype(FPTYPE)
             v[spikes > 0] = 0.0
 
             states.append(spikes.copy())
 
-        return np.array(states)
+        return np.array(states).astype(FPTYPE)
 
     def add_node(self):
         global N_RESERVOIR
         N_RESERVOIR += 1
-        W_new = np.random.randn(N_RESERVOIR, N_RESERVOIR).astype(np.float32)
+        W_new = np.random.randn(N_RESERVOIR, N_RESERVOIR).astype(FPTYPE)
         
         # need to copy the values from self.W into W_new 
         for i in range(N_RESERVOIR - 1):
@@ -159,113 +161,113 @@ def extract(events):
 history_X = []
 history_Y = []
 
-num_samples_per_episode = 10
-window = 6
-threshold_n = 1
-prev_scores = []
-Dp = 0 # \Delta P
-dp = 0 # \delta P
-Dp_hist = []
-dp_hist = []
+# num_samples_per_episode = 10
+# window = 6
+# threshold_n = 1
+# prev_scores = []
+# Dp = 0 # \Delta P
+# dp = 0 # \delta P
+# Dp_hist = []
+# dp_hist = []
 
 
-batch = train_idx[0: num_samples_per_episode]
-for idx in batch:
-    events, label = train_ds[idx]
-    feat = extract(events)
-    history_X.append(feat)
-    history_Y.append(label)
-
-for start in range(num_samples_per_episode + 1, len(train_idx) - 1 , num_samples_per_episode):
-    batch = train_idx[start: start + num_samples_per_episode]
-    for idx in batch:
-        events, label = train_ds[idx]
-
-        feat = extract(events)
-        history_X.append(feat)
-        history_Y.append(label)
-
-    x_train = np.array(history_X[:-num_samples_per_episode])
-    y_train = np.array(history_Y[:-num_samples_per_episode]) # except the last thing
-    # one hot encoding
-    Y = np.zeros((len(y_train), 10), dtype=np.float32)
-    Y[np.arange(len(y_train)), y_train] = 1.0
-
-    #train readout on everything except last "episode"
-    A = x_train.T @ x_train
-    B = x_train.T @ Y
-    Wout = np.linalg.solve(A + RIDGE * np.eye(A.shape[0]), B)
-
-    # check threshold 
-    
-    # run everything on the new episode
-    curr_score = 1
-    correct = 0
-    for i, idx  in enumerate(train_idx[start: start + num_samples_per_episode]):
-        events, label = train_ds[idx]
-
-        feat = extract(events)
-        pred = np.argmax(feat @ Wout)
-
-        correct += (pred == label)
-        curr_score = correct
-
-    prev_scores.append(curr_score)
-
-    if len(prev_scores) < window: 
-        continue
-
-    prev_score = prev_scores[-window]
-    Dp = (curr_score - prev_score) / window
-    Dp_hist.append(Dp)
-    
-
-    e_i = (start - window*num_samples_per_episode) //num_samples_per_episode
-    dp = 0
-    for i in range(e_i, e_i + window):
-        dp += prev_scores[i]
-    dp /= window*num_samples_per_episode
-    dp_hist.append(dp)
-
-    # print(dp , threshold_n)
-    # if dp < threshold_n:
-    #     lsm.add_node()
-    #     print("added lsm node with dp: ", dp)
-
-    if len(prev_scores) % 50 == 0 and i > 0:
-        print(np.mean(np.asarray(prev_scores)))
-
-
-# #print(x_train)
-# print("Evaluating...")
-
-# correct = 0
-
-# for i, idx in enumerate(test_idx):
-#     events, label = test_ds[idx]
-
+# batch = train_idx[0: num_samples_per_episode]
+# for idx in batch:
+#     events, label = train_ds[idx]
 #     feat = extract(events)
-#     pred = np.argmax(feat @ Wout)
+#     history_X.append(feat)
+#     history_Y.append(label)
 
-#     correct += (pred == label)
+# for start in range(num_samples_per_episode + 1, len(train_idx) - 1 , num_samples_per_episode):
+#     batch = train_idx[start: start + num_samples_per_episode]
+#     for idx in batch:
+#         events, label = train_ds[idx]
 
-#     if i % 500 == 0 and i > 0:
-#         print(i, correct / i)
+#         feat = extract(events)
+#         history_X.append(feat)
+#         history_Y.append(label)
 
-# print("\nFinal Accuracy:", correct / len(test_idx))
+#     x_train = np.array(history_X[:-num_samples_per_episode])
+#     y_train = np.array(history_Y[:-num_samples_per_episode]) # except the last thing
+#     # one hot encoding
+#     Y = np.zeros((len(y_train), 10), dtype=np.float32)
+#     Y[np.arange(len(y_train)), y_train] = 1.0
 
-import matplotlib.pyplot as plt
+#     #train readout on everything except last "episode"
+#     A = x_train.T @ x_train
+#     B = x_train.T @ Y
+#     Wout = np.linalg.solve(A + RIDGE * np.eye(A.shape[0]), B)
 
-print(Dp_hist)
-print(dp_hist)
-plt.plot(prev_scores)
-#plt.plot([x/num_samples_per_episode for x in prev_scores])
-#plt.plot(Dp_hist)
-#plt.plot(dp_hist)
-plt.xlabel("Episode")
-plt.ylabel("Accuracy")
-plt.title("Episode Accuracy")
-plt.show()
+#     # check threshold 
+    
+#     # run everything on the new episode
+#     curr_score = 1
+#     correct = 0
+#     for i, idx  in enumerate(train_idx[start: start + num_samples_per_episode]):
+#         events, label = train_ds[idx]
+
+#         feat = extract(events)
+#         pred = np.argmax(feat @ Wout)
+
+#         correct += (pred == label)
+#         curr_score = correct
+
+#     prev_scores.append(curr_score)
+
+#     if len(prev_scores) < window: 
+#         continue
+
+#     prev_score = prev_scores[-window]
+#     Dp = (curr_score - prev_score) / window
+#     Dp_hist.append(Dp)
+    
+
+#     e_i = (start - window*num_samples_per_episode) //num_samples_per_episode
+#     dp = 0
+#     for i in range(e_i, e_i + window):
+#         dp += prev_scores[i]
+#     dp /= window*num_samples_per_episode
+#     dp_hist.append(dp)
+
+#     # print(dp , threshold_n)
+#     # if dp < threshold_n:
+#     #     lsm.add_node()
+#     #     print("added lsm node with dp: ", dp)
+
+#     if len(prev_scores) % 50 == 0 and i > 0:
+#         print(np.mean(np.asarray(prev_scores)))
+
+
+# # #print(x_train)
+# # print("Evaluating...")
+
+# # correct = 0
+
+# # for i, idx in enumerate(test_idx):
+# #     events, label = test_ds[idx]
+
+# #     feat = extract(events)
+# #     pred = np.argmax(feat @ Wout)
+
+# #     correct += (pred == label)
+
+# #     if i % 500 == 0 and i > 0:
+# #         print(i, correct / i)
+
+# # print("\nFinal Accuracy:", correct / len(test_idx))
+
+# import matplotlib.pyplot as plt
+
+# print(Dp_hist)
+# print(dp_hist)
+# plt.plot(prev_scores)
+# #plt.plot([x/num_samples_per_episode for x in prev_scores])
+# #plt.plot(Dp_hist)
+# #plt.plot(dp_hist)
+# plt.xlabel("Episode")
+# plt.ylabel("Accuracy")
+# plt.title("Episode Accuracy")
+# plt.show()
 
 
 
@@ -284,7 +286,7 @@ plt.show()
 
 
 
-exit() # beyond here is normal tranining
+# #exit() # beyond here is normal tranining
 
 
 
@@ -303,17 +305,17 @@ for i, idx in enumerate(train_idx):
     if i % 500 == 0:
         print("train:", i)
 
-history_X = np.array(history_X)
-y_train = np.array(y_train)
+history_X = np.array(history_X).astype(FPTYPE)
+y_train = np.array(y_train)# errors when I give it a dtype.
 
 
-Y = np.zeros((len(y_train), 10), dtype=np.float32)
+Y = np.zeros((len(y_train), 10), dtype=FPTYPE)
 Y[np.arange(len(y_train)), y_train] = 1.0
 
 print("Training readout...")
 
-A = history_X.T @ history_X
-B = history_X.T @ Y
+A = (history_X.T @ history_X).astype(np.float64)
+B = (history_X.T @ Y).astype(np.float64)
 
 Wout = np.linalg.solve(A + RIDGE * np.eye(A.shape[0]), B)
 
